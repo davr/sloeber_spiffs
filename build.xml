@@ -4,20 +4,22 @@
 		2) Update the classpath to match where you put it!
 	-->
 	<taskdef name="groovy"
-		classpath="C:\Users\Paul\Downloads\groovy-2.4.13\embeddable\groovy-all-2.4.13.jar"
+		classpath="H:\mcu\esp\groovy-2.4.18\embeddable\groovy-all-2.4.18.jar"
 		classname="org.codehaus.groovy.ant.Groovy"/>
 
 	<property name="spiffs.file" value="spiffs.bin"/>
-	<property name="spiffs.dir" value="web"/>
+	<property name="spiffs.dir" value="data"/>
 	
 	<!--
 		Download this jar from https://github.com/littleyoda/EspStackTraceDecoder
 		if you want the stack trace tool to work. Update this property to point to it!
 	-->
-	<property name="stack.jar" value="C:\Users\Paul\Downloads\EspStackTraceDecoder.jar"/>
+	<property name="stack.jar" value="H:\mcu\esp\EspStackTraceDecoder.jar"/>
 	
-	<echo> ${eclipse_home} </echo>
+	<echo>eclipse_home: ${eclipse_home} </echo>
 	<groovy>
+        println("Project directory: "+System.getProperty("user.dir"));
+
 		String getProperty(Properties props, String key, int level) {
 		def value = null
 		   value = props.getProperty(key);
@@ -82,11 +84,18 @@
 		    }
 		}
 		props.each{ k, v -> 
-			properties[k] = getProperty(props, k, 0)
+            // replace duplicate backslashes
+            properties[k] = getProperty(props, k, 0).replaceAll("\\\\\\\\", "\\\\").replaceAll("\\\\:", ":")
 		}
 		
 		properties['A.BUILD.SPIFFS_SIZE'] = Integer.parseInt(properties['A.BUILD.SPIFFS_END'].substring(2),16) - Integer.parseInt(properties['A.BUILD.SPIFFS_START'].substring(2), 16)
-		println(		properties['A.BUILD.SPIFFS_SIZE'])
+		println("spiffs size: "+properties['A.BUILD.SPIFFS_SIZE'])
+
+        // When doing OTA uploads, serial port contains a value like "my-esp-device.local 192.168.0.123"
+        def parts = properties['A.SERIAL.PORT'].split(" ")
+        if(parts.size() > 1) {
+            properties['ESP_HOSTNAME'] = parts[0]
+        }
 	</groovy>
 
 	<target name="stack">
@@ -109,21 +118,22 @@
 		</exec>		
 	</target>
 	
-	<target name="OTA spiff upload" if="A.NETWORK.PORT">
+	<target name="OTA spiff upload" if="ESP_HOSTNAME">
 		<exec executable="${A.TOOLS.ESPTOOL.NETWORK_CMD}">
 			<arg value="${A.RUNTIME.PLATFORM.PATH}/tools/espota.py"/>
 			<arg value="-i"/>
-			<arg value="${A.SERIAL.PORT}"/>
-			<arg value="-p"/>
-			<arg value="${A.NETWORK.PORT}"/>
+			<arg value="${ESP_HOSTNAME}"/>
+			<!-- arg value="-p"/>
+			<arg value="${A.NETWORK.PORT}"/ -->
 			<arg value="-s"/>
 			<arg value="-f"/>
 			<arg value="${project_loc}/${spiffs.file}"/>
 		</exec>		
 	</target>
 	
-	<target name="wired spiff upload" unless="A.NETWORK.PORT">
-		<exec executable="${A.TOOLS.ESPTOOL.PATH}/${A.TOOLS.ESPTOOL.CMD}">
+	<target name="wired spiff upload" unless="ESP_HOSTNAME">
+		<exec executable="${A.TOOLS.ESPTOOL.CMD}">
+            <arg value="${A.RUNTIME.PLATFORM.PATH}/tools/upload.py"/>
 			<arg value="-cd"/>
 			<arg value="${A.UPLOAD.RESETMETHOD}"/>
 			<arg value="-cb"/>
